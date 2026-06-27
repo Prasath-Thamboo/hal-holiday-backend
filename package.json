@@ -14,7 +14,8 @@
     "migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli migration:generate -d database/datasource.ts",
     "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli migration:run -d database/datasource.ts",
     "migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli migration:revert -d database/datasource.ts",
-    "seed": "ts-node -r tsconfig-paths/register database/seeds/places.seed.ts"
+    "seed": "ts-node -r tsconfig-paths/register database/seeds/places.seed.ts",
+    "seed:admin": "ts-node -r tsconfig-paths/register database/seeds/admin.seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

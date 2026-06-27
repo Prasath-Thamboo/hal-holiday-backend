@@ -118,6 +118,25 @@ describe('PlacesService', () => {
     });
   });
 
+  // ── findBySlug ───────────────────────────────────────────────────────────
+
+  describe('findBySlug', () => {
+    it('returns the place when the slug matches a published place', async () => {
+      const place = { id: 'abc', slug: 'mon-resto', published: true } as Place;
+      repo.findOne.mockResolvedValue(place);
+
+      expect(await service.findBySlug('mon-resto')).toBe(place);
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { slug: 'mon-resto', published: true },
+      });
+    });
+
+    it('throws NotFoundException when slug is not found or place is unpublished', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.findBySlug('missing-slug')).rejects.toThrow(NotFoundException);
+    });
+  });
+
   // ── findNearby ───────────────────────────────────────────────────────────
 
   describe('findNearby', () => {
