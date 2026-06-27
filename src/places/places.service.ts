@@ -7,8 +7,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreatePlaceDto } from './dto/create-place.dto';
 import { NearbyQueryDto } from './dto/nearby-query.dto';
+import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { UpdatePlaceDto } from './dto/update-place.dto';
 import { Place } from './entities/place.entity';
+
+export interface PaginatedResult<T> {
+  data: T[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+}
 
 @Injectable()
 export class PlacesService {
@@ -42,8 +48,15 @@ export class PlacesService {
     return this.findOne(rows[0].id);
   }
 
-  findAll(): Promise<Place[]> {
-    return this.placesRepo.find({ order: { created_at: 'DESC' } });
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResult<Place>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const [data, total] = await this.placesRepo.findAndCount({
+      order: { created_at: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOne(id: string): Promise<Place> {
@@ -86,6 +99,12 @@ export class PlacesService {
     }
 
     return this.findOne(id);
+  }
+
+  async findBySlug(slug: string): Promise<Place> {
+    const place = await this.placesRepo.findOne({ where: { slug, published: true } });
+    if (!place) throw new NotFoundException(`Place "${slug}" not found`);
+    return place;
   }
 
   async remove(id: string): Promise<void> {
