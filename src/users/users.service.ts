@@ -17,4 +17,11 @@ export class UsersService {
   create(data: Pick<User, 'email' | 'passwordHash' | 'role'>): Promise<User> {
     return this.usersRepo.save(this.usersRepo.create(data));
   }
+
+  findAll(): Promise<Omit<User, 'passwordHash'>[]> {
+    return this.usersRepo.find({
+      select: { id: true, email: true, role: true, created_at: true },
+      order: { created_at: 'DESC' },
+    });
+  }
 }

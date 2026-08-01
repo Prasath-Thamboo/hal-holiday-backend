@@ -33,13 +33,13 @@ describe('PlacesService', () => {
 
   describe('findOne', () => {
     it('throws NotFoundException when place does not exist', async () => {
-      repo.findOne.mockResolvedValue(null);
+      repo.query.mockResolvedValue([]);
       await expect(service.findOne('missing-id')).rejects.toThrow(NotFoundException);
     });
 
     it('returns the place when found', async () => {
       const place = { id: 'abc', name: 'Test' } as Place;
-      repo.findOne.mockResolvedValue(place);
+      repo.query.mockResolvedValue([place]);
       expect(await service.findOne('abc')).toBe(place);
     });
   });
@@ -54,6 +54,7 @@ describe('PlacesService', () => {
       const result = await service.findAll({});
 
       expect(repo.findAndCount).toHaveBeenCalledWith({
+        where: {},
         order: { created_at: 'DESC' },
         skip: 0,
         take: 20,
@@ -68,6 +69,7 @@ describe('PlacesService', () => {
       const result = await service.findAll({ page: 3, limit: 10 });
 
       expect(repo.findAndCount).toHaveBeenCalledWith({
+        where: {},
         order: { created_at: 'DESC' },
         skip: 20,
         take: 10,
@@ -102,11 +104,10 @@ describe('PlacesService', () => {
 
     it('inserts via raw SQL and returns the newly created place', async () => {
       const created = { id: 'new-uuid', name: 'Mon Resto' } as Place;
-      repo.findOne
-        .mockResolvedValueOnce(null)    // slug conflict check
-        .mockResolvedValueOnce(created); // findOne after INSERT
-
-      repo.query.mockResolvedValue([{ id: 'new-uuid' }]);
+      repo.findOne.mockResolvedValueOnce(null); // slug conflict check
+      repo.query
+        .mockResolvedValueOnce([{ id: 'new-uuid' }]) // INSERT RETURNING id
+        .mockResolvedValueOnce([created]);            // findOne SELECT
 
       const result = await service.create(dto);
 

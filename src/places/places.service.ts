@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { CreatePlaceDto } from './dto/create-place.dto';
 import { NearbyQueryDto } from './dto/nearby-query.dto';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
@@ -51,7 +51,11 @@ export class PlacesService {
   async findAll(query: PaginationQueryDto): Promise<PaginatedResult<Place>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    const where: FindOptionsWhere<Place> = {};
+    if (query.published !== undefined) where.published = query.published;
+    if (query.types && query.types.length > 0) where.type = In(query.types);
     const [data, total] = await this.placesRepo.findAndCount({
+      where,
       order: { created_at: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -59,10 +63,34 @@ export class PlacesService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string): Promise<Place> {
-    const place = await this.placesRepo.findOne({ where: { id } });
-    if (!place) throw new NotFoundException(`Place ${id} not found`);
-    return place;
+  async getStats(): Promise<PlaceStats> {
+    const rows = await this.placesRepo.query(`
+      SELECT
+        COUNT(*)                                       AS total,
+        COUNT(*) FILTER (WHERE published)              AS published,
+        COUNT(*) FILTER (WHERE NOT published)          AS drafts,
+        COUNT(*) FILTER (WHERE type = 'restaurant')    AS restaurant,
+        COUNT(*) FILTER (WHERE type = 'mosque')        AS mosque,
+        COUNT(*) FILTER (WHERE type = 'activity')      AS activity
+      FROM places
+    `) as [Record<string, string>];
+    const r = rows[0];
+    return {
+      total: +r.total,
+      published: +r.published,
+      drafts: +r.drafts,
+      byType: { restaurant: +r.restaurant, mosque: +r.mosque, activity: +r.activity },
+    };
+  }
+
+  async findOne(id: string): Promise<Place & { latitude: number; longitude: number }> {
+    const rows = await this.placesRepo.query(
+      `SELECT *, ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude
+       FROM places WHERE id = $1`,
+      [id],
+    ) as Array<Place & { latitude: number; longitude: number }>;
+    if (!rows.length) throw new NotFoundException(`Place ${id} not found`);
+    return rows[0];
   }
 
   async update(id: string, dto: UpdatePlaceDto): Promise<Place> {
@@ -108,8 +136,8 @@ export class PlacesService {
   }
 
   async remove(id: string): Promise<void> {
-    const place = await this.findOne(id);
-    await this.placesRepo.remove(place);
+    const result = await this.placesRepo.delete(id);
+    if (result.affected === 0) throw new NotFoundException(`Place ${id} not found`);
   }
 
   async findNearby(dto: NearbyQueryDto): Promise<NearbyResult[]> {
@@ -166,6 +194,13 @@ export class PlacesService {
 
     return this.placesRepo.query(sql, params) as Promise<NearbyResult[]>;
   }
+}
+
+export interface PlaceStats {
+  total: number;
+  published: number;
+  drafts: number;
+  byType: { restaurant: number; mosque: number; activity: number };
 }
 
 export interface NearbyResult {

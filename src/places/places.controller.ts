@@ -30,7 +30,7 @@ import { NearbyQueryDto } from './dto/nearby-query.dto';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { UpdatePlaceDto } from './dto/update-place.dto';
 import { Place } from './entities/place.entity';
-import { NearbyResult, PaginatedResult, PlacesService } from './places.service';
+import { NearbyResult, PaginatedResult, PlaceStats, PlacesService } from './places.service';
 
 @ApiTags('places')
 @Controller('places')
@@ -90,6 +90,17 @@ export class PlacesController {
   @ApiOkResponse({ description: 'Liste des lieux avec distance_m' })
   findNearby(@Query() query: NearbyQueryDto): Promise<NearbyResult[]> {
     return this.placesService.findNearby(query);
+  }
+
+  @Get('stats')
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Statistiques globales (admin)' })
+  @ApiOkResponse({ description: '{ total, published, drafts, byType }' })
+  getStats(): Promise<PlaceStats> {
+    return this.placesService.getStats();
   }
 
   @Get('slug/:slug')
