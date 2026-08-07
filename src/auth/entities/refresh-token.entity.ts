@@ -3,6 +3,7 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -14,6 +15,7 @@ export class RefreshToken {
   id!: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user!: User;
 
   @Index()

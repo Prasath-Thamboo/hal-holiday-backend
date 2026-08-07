@@ -20,6 +20,9 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, enumName: 'user_role', default: UserRole.USER })
   role!: UserRole;
 
+  @Column({ name: 'is_active', default: true })
+  isActive!: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;
 }

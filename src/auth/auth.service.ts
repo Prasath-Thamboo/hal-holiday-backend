@@ -60,6 +60,8 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
+    if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
+
     return this.issueTokenPair(user.id, user.email, user.role);
   }
 
@@ -76,6 +78,8 @@ export class AuthService {
     await this.refreshTokenRepo.delete(stored.id);
 
     const { user } = stored;
+    if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
+
     return this.issueTokenPair(user.id, user.email, user.role);
   }
 

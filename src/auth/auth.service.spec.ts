@@ -32,6 +32,7 @@ describe('AuthService', () => {
     email: 'test@halholiday.fr',
     passwordHash: '$2b$10$fakeHash',
     role: UserRole.USER,
+    isActive: true,
     created_at: new Date(),
   };
 
