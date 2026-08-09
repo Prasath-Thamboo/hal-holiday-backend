@@ -82,6 +82,15 @@ describe('PlacesService', () => {
       const result = await service.findAll({ limit: 10 });
       expect(result.meta.totalPages).toBe(3);
     });
+
+    it('searches name or address (OR) via ILike when search is provided', async () => {
+      repo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ search: 'couscous' });
+
+      const call = repo.findAndCount.mock.calls[0][0] as { where: unknown[] };
+      expect(Array.isArray(call.where)).toBe(true);
+      expect(call.where).toHaveLength(2);
+    });
   });
 
   // ── create ───────────────────────────────────────────────────────────────
@@ -122,18 +131,25 @@ describe('PlacesService', () => {
   // ── findBySlug ───────────────────────────────────────────────────────────
 
   describe('findBySlug', () => {
-    it('returns the place when the slug matches a published place', async () => {
-      const place = { id: 'abc', slug: 'mon-resto', published: true } as Place;
-      repo.findOne.mockResolvedValue(place);
+    it('returns the place with latitude/longitude when the slug matches a published place', async () => {
+      const place = {
+        id: 'abc',
+        slug: 'mon-resto',
+        published: true,
+        latitude: 48.8566,
+        longitude: 2.3522,
+      };
+      repo.query.mockResolvedValue([place]);
 
       expect(await service.findBySlug('mon-resto')).toBe(place);
-      expect(repo.findOne).toHaveBeenCalledWith({
-        where: { slug: 'mon-resto', published: true },
-      });
+      expect(repo.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE slug = $1 AND published = true'),
+        ['mon-resto'],
+      );
     });
 
     it('throws NotFoundException when slug is not found or place is unpublished', async () => {
-      repo.findOne.mockResolvedValue(null);
+      repo.query.mockResolvedValue([]);
       await expect(service.findBySlug('missing-slug')).rejects.toThrow(NotFoundException);
     });
   });
@@ -189,6 +205,16 @@ describe('PlacesService', () => {
 
       const [sql] = repo.query.mock.calls[0] as [string, unknown[]];
       expect(sql).toContain('ORDER BY distance_m ASC');
+    });
+
+    it('adds name/address ILIKE filter when search is provided', async () => {
+      repo.query.mockResolvedValue([]);
+      await service.findNearby({ lat: 48.8566, lng: 2.3522, search: 'couscous' });
+
+      const [sql, params] = repo.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('name ILIKE');
+      expect(sql).toContain('address ILIKE');
+      expect(params).toContain('%couscous%');
     });
   });
 });

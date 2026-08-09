@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, In, Repository } from 'typeorm';
 import { CreatePlaceDto } from './dto/create-place.dto';
 import { NearbyQueryDto } from './dto/nearby-query.dto';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
@@ -54,8 +54,16 @@ export class PlacesService {
     const where: FindOptionsWhere<Place> = {};
     if (query.published !== undefined) where.published = query.published;
     if (query.types && query.types.length > 0) where.type = In(query.types);
+
+    const whereOption = query.search
+      ? [
+          { ...where, name: ILike(`%${query.search}%`) },
+          { ...where, address: ILike(`%${query.search}%`) },
+        ]
+      : where;
+
     const [data, total] = await this.placesRepo.findAndCount({
-      where,
+      where: whereOption,
       order: { created_at: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -129,10 +137,14 @@ export class PlacesService {
     return this.findOne(id);
   }
 
-  async findBySlug(slug: string): Promise<Place> {
-    const place = await this.placesRepo.findOne({ where: { slug, published: true } });
-    if (!place) throw new NotFoundException(`Place "${slug}" not found`);
-    return place;
+  async findBySlug(slug: string): Promise<Place & { latitude: number; longitude: number }> {
+    const rows = await this.placesRepo.query(
+      `SELECT *, ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude
+       FROM places WHERE slug = $1 AND published = true`,
+      [slug],
+    ) as Array<Place & { latitude: number; longitude: number }>;
+    if (!rows.length) throw new NotFoundException(`Place "${slug}" not found`);
+    return rows[0];
   }
 
   async remove(id: string): Promise<void> {
@@ -188,6 +200,12 @@ export class PlacesService {
 
     if (dto.noAlcohol === true) {
       sql += ` AND serves_alcohol = false`;
+    }
+
+    if (dto.search) {
+      sql += ` AND (name ILIKE $${paramIndex} OR address ILIKE $${paramIndex})`;
+      params.push(`%${dto.search}%`);
+      paramIndex++;
     }
 
     sql += ` ORDER BY distance_m ASC`;

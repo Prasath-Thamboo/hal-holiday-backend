@@ -7,7 +7,9 @@ import {
   IsLatitude,
   IsLongitude,
   IsOptional,
+  IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { PlaceType } from '../../common/enums/place-type.enum';
@@ -69,4 +71,10 @@ export class NearbyQueryDto {
   })
   @IsBoolean()
   noAlcohol?: boolean;
+
+  @ApiPropertyOptional({ example: 'couscous', description: 'Recherche par nom ou adresse' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 }
