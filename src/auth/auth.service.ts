@@ -44,10 +44,14 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already in use');
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+    const now = new Date();
     const user = await this.usersService.create({
       email: dto.email,
       passwordHash,
       role: UserRole.USER,
+      // dto.acceptedTerms is validated as `true` by RegisterDto (@Equals(true))
+      acceptedTermsAt: now,
+      acceptedPrivacyPolicyAt: now,
     });
 
     return this.issueTokenPair(user.id, user.email, user.role);

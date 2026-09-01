@@ -16,7 +16,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import { UserRole } from '../common/enums/user-role.enum';
+import { User } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import { AuthService, AuthTokens } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -33,7 +34,10 @@ const TOKEN_EXAMPLE = { access_token: 'eyJ...', refresh_token: 'a1b2c3...' };
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post('register')
   @Throttle(AUTH_THROTTLE)
@@ -78,9 +82,7 @@ export class AuthController {
   @ApiOkResponse({
     schema: { example: { id: 'uuid...', email: 'user@halholiday.fr', role: 'user' } },
   })
-  getMe(
-    @CurrentUser() user: JwtPayload,
-  ): { id: string; email: string; role: UserRole } {
-    return { id: user.sub, email: user.email, role: user.role };
+  getMe(@CurrentUser() user: JwtPayload): Promise<Omit<User, 'passwordHash'>> {
+    return this.usersService.findByIdOrThrow(user.sub).then(({ passwordHash: _omit, ...rest }) => rest);
   }
 }

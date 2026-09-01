@@ -33,6 +33,12 @@ describe('AuthService', () => {
     passwordHash: '$2b$10$fakeHash',
     role: UserRole.USER,
     isActive: true,
+    phoneNumber: null,
+    language: 'fr',
+    halalStrictnessPreference: null,
+    notificationPreferences: { promos: true, planning_reminders: true, prayer_times: true },
+    acceptedTermsAt: new Date(),
+    acceptedPrivacyPolicyAt: new Date(),
     created_at: new Date(),
   };
 
@@ -73,7 +79,7 @@ describe('AuthService', () => {
     it('throws ConflictException when email is already taken', async () => {
       jest.mocked(usersService.findByEmail).mockResolvedValue(fakeUser);
       await expect(
-        service.register({ email: fakeUser.email, password: 'pass1234' }),
+        service.register({ email: fakeUser.email, password: 'pass1234', acceptedTerms: true }),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -81,7 +87,7 @@ describe('AuthService', () => {
       jest.mocked(usersService.findByEmail).mockResolvedValue(null);
       jest.mocked(usersService.create).mockResolvedValue(fakeUser);
 
-      const result = await service.register({ email: fakeUser.email, password: 'pass1234' });
+      const result = await service.register({ email: fakeUser.email, password: 'pass1234', acceptedTerms: true });
 
       expect(bcrypt.hash).toHaveBeenCalledWith('pass1234', 10);
       expect(result).toMatchObject({

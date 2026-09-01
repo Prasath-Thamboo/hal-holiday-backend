@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { Equals, IsBoolean, IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'admin@halholiday.fr' })
@@ -11,4 +11,13 @@ export class RegisterDto {
   @MinLength(8)
   @MaxLength(72)
   password!: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "Consentement explicite aux CGU et à la politique de confidentialité (RGPD) — doit être true",
+  })
+  @IsBoolean()
+  @Equals(true, { message: 'Vous devez accepter les CGU et la politique de confidentialité' })
+  acceptedTerms!: boolean;
 }

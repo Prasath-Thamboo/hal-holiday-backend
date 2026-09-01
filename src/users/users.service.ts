@@ -1,9 +1,15 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { UserRole } from '../common/enums/user-role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { User } from './entities/user.entity';
 
 const SALT_ROUNDS = 10;
@@ -25,7 +31,10 @@ export class UsersService {
     return user;
   }
 
-  create(data: Pick<User, 'email' | 'passwordHash' | 'role'>): Promise<User> {
+  create(
+    data: Pick<User, 'email' | 'passwordHash' | 'role'> &
+      Partial<Pick<User, 'acceptedTermsAt' | 'acceptedPrivacyPolicyAt'>>,
+  ): Promise<User> {
     return this.usersRepo.save(this.usersRepo.create(data));
   }
 
@@ -64,5 +73,94 @@ export class UsersService {
       select: { id: true, email: true, role: true, isActive: true, created_at: true },
       order: { created_at: 'DESC' },
     });
+  }
+
+  // ── Compte (self-service) ─────────────────────────────────────────────────
+
+  private async verifyPassword(user: User, password: string): Promise<void> {
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Mot de passe incorrect');
+  }
+
+  async updateEmail(
+    userId: string,
+    newEmail: string,
+    password: string,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    const user = await this.findByIdOrThrow(userId);
+    await this.verifyPassword(user, password);
+
+    if (newEmail !== user.email) {
+      const existing = await this.findByEmail(newEmail);
+      if (existing) throw new ConflictException('Email already in use');
+    }
+
+    user.email = newEmail;
+    const saved = await this.usersRepo.save(user);
+    const { passwordHash: _omit, ...rest } = saved;
+    return rest;
+  }
+
+  async updatePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.findByIdOrThrow(userId);
+    await this.verifyPassword(user, currentPassword);
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.usersRepo.save(user);
+  }
+
+  async updatePhone(
+    userId: string,
+    phoneNumber: string | null | undefined,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    const user = await this.findByIdOrThrow(userId);
+    user.phoneNumber = phoneNumber ?? null;
+    const saved = await this.usersRepo.save(user);
+    const { passwordHash: _omit, ...rest } = saved;
+    return rest;
+  }
+
+  async updatePreferences(
+    userId: string,
+    dto: UpdatePreferencesDto,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    const user = await this.findByIdOrThrow(userId);
+
+    if (dto.language !== undefined) user.language = dto.language;
+    if (dto.halalStrictnessPreference !== undefined) {
+      user.halalStrictnessPreference = dto.halalStrictnessPreference;
+    }
+    if (dto.notificationPreferences !== undefined) {
+      user.notificationPreferences = {
+        ...user.notificationPreferences,
+        ...dto.notificationPreferences,
+      };
+    }
+
+    const saved = await this.usersRepo.save(user);
+    const { passwordHash: _omit, ...rest } = saved;
+    return rest;
+  }
+
+  /** Export RGPD (art. 20) : instantané des données personnelles du compte. */
+  async exportData(userId: string): Promise<Record<string, unknown>> {
+    const user = await this.findByIdOrThrow(userId);
+    const { passwordHash: _omit, ...profile } = user;
+    return {
+      exported_at: new Date().toISOString(),
+      profile,
+    };
+  }
+
+  async deleteAccount(userId: string, password: string): Promise<void> {
+    const user = await this.findByIdOrThrow(userId);
+    await this.verifyPassword(user, password);
+    // Suppression définitive : les favoris (et futures données liées, ex.
+    // séjours/planning) sont retirés en cascade via les FK ON DELETE CASCADE.
+    await this.usersRepo.delete(user.id);
   }
 }
