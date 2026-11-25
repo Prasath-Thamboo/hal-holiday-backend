@@ -4,12 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, ILike, In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { PlaceCategory } from '../common/enums/place-category.enum';
 import { CreatePlaceDto } from './dto/create-place.dto';
 import { NearbyQueryDto } from './dto/nearby-query.dto';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { UpdatePlaceDto } from './dto/update-place.dto';
 import { Place } from './entities/place.entity';
+import { OpeningHours } from './types/opening-hours';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -31,15 +33,18 @@ export class PlacesService {
     const rows = await this.placesRepo.query(
       `INSERT INTO places
          (type, name, slug, description, address, arrondissement, city,
-          location, halal_level, serves_alcohol, prayer_room, published)
+          location, category, opening_hours, halal_level, serves_alcohol,
+          prayer_room, published)
        VALUES ($1,$2,$3,$4,$5,$6,$7,
                ST_SetSRID(ST_MakePoint($8,$9), 4326)::geography,
-               $10,$11,$12,$13)
+               $10,$11::jsonb,$12,$13,$14,$15)
        RETURNING id`,
       [
         dto.type, dto.name, dto.slug, dto.description ?? null,
         dto.address, dto.arrondissement, dto.city ?? 'Paris',
         dto.longitude, dto.latitude,
+        dto.category ?? null,
+        dto.opening_hours ? JSON.stringify(dto.opening_hours) : null,
         dto.halal_level ?? null, dto.serves_alcohol ?? false,
         dto.prayer_room ?? false, dto.published ?? false,
       ],
@@ -51,23 +56,33 @@ export class PlacesService {
   async findAll(query: PaginationQueryDto): Promise<PaginatedResult<Place>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: FindOptionsWhere<Place> = {};
-    if (query.published !== undefined) where.published = query.published;
-    if (query.types && query.types.length > 0) where.type = In(query.types);
 
-    const whereOption = query.search
-      ? [
-          { ...where, name: ILike(`%${query.search}%`) },
-          { ...where, address: ILike(`%${query.search}%`) },
-        ]
-      : where;
+    const qb = this.placesRepo
+      .createQueryBuilder('p')
+      .orderBy('p.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
-    const [data, total] = await this.placesRepo.findAndCount({
-      where: whereOption,
-      order: { created_at: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    if (query.published !== undefined) {
+      qb.andWhere('p.published = :published', { published: query.published });
+    }
+    if (query.types && query.types.length > 0) {
+      qb.andWhere('p.type IN (:...types)', { types: query.types });
+    }
+    // Sous-catégories : ne restreint que les lignes `activity` (cohérent avec
+    // /places/nearby), pour que « Touristique » n'exclue pas mosquées/restaurants.
+    if (query.categories && query.categories.length > 0) {
+      qb.andWhere("(p.type <> 'activity' OR p.category IN (:...categories))", {
+        categories: query.categories,
+      });
+    }
+    if (query.search) {
+      qb.andWhere('(p.name ILIKE :search OR p.address ILIKE :search)', {
+        search: `%${query.search}%`,
+      });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
@@ -165,7 +180,7 @@ export class PlacesService {
     let sql = `
       SELECT
         id, type, name, slug, description, address,
-        arrondissement, city, halal_level,
+        arrondissement, city, category, opening_hours, halal_level,
         serves_alcohol, prayer_room, published, created_at,
         ST_X(location::geometry)              AS longitude,
         ST_Y(location::geometry)              AS latitude,
@@ -190,6 +205,18 @@ export class PlacesService {
       sql += ` AND type IN (${placeholders})`;
       params.push(...dto.types);
       paramIndex += dto.types.length;
+    }
+
+    // Sous-catégories : ne restreint que les lignes `activity` ; les mosquées
+    // et restaurants (category NULL) restent visibles même si des catégories
+    // sont cochées sur la carte.
+    if (dto.categories && dto.categories.length > 0) {
+      const placeholders = dto.categories
+        .map((_, i) => `$${paramIndex + i}`)
+        .join(', ');
+      sql += ` AND (type <> 'activity' OR category IN (${placeholders}))`;
+      params.push(...dto.categories);
+      paramIndex += dto.categories.length;
     }
 
     if (dto.minHalal !== undefined) {
@@ -230,6 +257,8 @@ export interface NearbyResult {
   address: string;
   arrondissement: number;
   city: string;
+  category: PlaceCategory | null;
+  opening_hours: OpeningHours | null;
   halal_level: number | null;
   serves_alcohol: boolean;
   prayer_room: boolean;

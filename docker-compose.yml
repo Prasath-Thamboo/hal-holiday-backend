@@ -1,3 +1,7 @@
+# Nom de projet explicite : le dossier s'appelle "backend", comme celui d'un
+# autre projet — sans ça, docker compose fusionnerait les deux stacks.
+name: hal-holiday
+
 services:
   postgres:
     image: postgis/postgis:16-3.4

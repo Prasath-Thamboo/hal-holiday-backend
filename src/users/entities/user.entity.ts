@@ -29,7 +29,7 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
-  @Column({ name: 'phone_number', length: 20, nullable: true })
+  @Column({ name: 'phone_number', type: 'varchar', length: 20, nullable: true })
   phoneNumber!: string | null;
 
   @Column({ length: 5, default: 'fr' })

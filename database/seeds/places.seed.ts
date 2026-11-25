@@ -6,6 +6,13 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 import { AppDataSource } from '../datasource';
 
+type TimeSlot = { open: string; close: string };
+type OpeningHours = Partial<
+  Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', TimeSlot[]>
+> & {
+  exceptions?: { date: string; closed: boolean; slots?: TimeSlot[] }[];
+};
+
 interface SeedPlace {
   type: 'restaurant' | 'mosque' | 'activity';
   name: string;
@@ -15,11 +22,34 @@ interface SeedPlace {
   arrondissement: number;
   lat: number;
   lng: number;
+  category?: 'touristique' | 'divertissement' | null;
+  opening_hours?: OpeningHours | null;
   halal_level: number | null;
   serves_alcohol: boolean;
   prayer_room: boolean;
   published: boolean;
 }
+
+// Créneaux réutilisables pour éviter la répétition
+const LUNCH_DINNER: OpeningHours = {
+  mon: [{ open: '12:00', close: '14:30' }, { open: '19:00', close: '22:30' }],
+  tue: [{ open: '12:00', close: '14:30' }, { open: '19:00', close: '22:30' }],
+  wed: [{ open: '12:00', close: '14:30' }, { open: '19:00', close: '22:30' }],
+  thu: [{ open: '12:00', close: '14:30' }, { open: '19:00', close: '22:30' }],
+  fri: [{ open: '12:00', close: '14:30' }, { open: '19:00', close: '23:00' }],
+  sat: [{ open: '12:00', close: '23:00' }],
+  sun: [{ open: '12:00', close: '22:00' }],
+};
+
+const DAILY_9_19: OpeningHours = {
+  mon: [{ open: '09:00', close: '19:00' }],
+  tue: [{ open: '09:00', close: '19:00' }],
+  wed: [{ open: '09:00', close: '19:00' }],
+  thu: [{ open: '09:00', close: '19:00' }],
+  fri: [{ open: '09:00', close: '19:00' }],
+  sat: [{ open: '10:00', close: '19:00' }],
+  sun: [{ open: '10:00', close: '18:00' }],
+};
 
 const places: SeedPlace[] = [
   // ── Restaurants ────────────────────────────────────────────────────────────
@@ -32,6 +62,7 @@ const places: SeedPlace[] = [
     arrondissement: 4,
     lat: 48.8604,
     lng: 2.3508,
+    opening_hours: LUNCH_DINNER,
     halal_level: 3,
     serves_alcohol: false,
     prayer_room: false,
@@ -46,6 +77,15 @@ const places: SeedPlace[] = [
     arrondissement: 11,
     lat: 48.8665,
     lng: 2.3785,
+    opening_hours: {
+      mon: [{ open: '11:30', close: '23:00' }],
+      tue: [{ open: '11:30', close: '23:00' }],
+      wed: [{ open: '11:30', close: '23:00' }],
+      thu: [{ open: '11:30', close: '23:00' }],
+      fri: [{ open: '11:30', close: '00:00' }],
+      sat: [{ open: '11:30', close: '00:00' }],
+      sun: [{ open: '12:00', close: '23:00' }],
+    },
     halal_level: 4,
     serves_alcohol: false,
     prayer_room: false,
@@ -131,6 +171,15 @@ const places: SeedPlace[] = [
     arrondissement: 5,
     lat: 48.8425,
     lng: 2.3535,
+    opening_hours: {
+      mon: [{ open: '09:00', close: '21:00' }],
+      tue: [{ open: '09:00', close: '21:00' }],
+      wed: [{ open: '09:00', close: '21:00' }],
+      thu: [{ open: '09:00', close: '21:00' }],
+      fri: [{ open: '09:00', close: '21:00' }],
+      sat: [{ open: '09:00', close: '21:00' }],
+      sun: [{ open: '09:00', close: '21:00' }],
+    },
     halal_level: null,
     serves_alcohol: false,
     prayer_room: true,
@@ -188,6 +237,16 @@ const places: SeedPlace[] = [
     arrondissement: 5,
     lat: 48.8435,
     lng: 2.354,
+    category: 'divertissement',
+    opening_hours: {
+      mon: [{ open: '10:00', close: '21:00' }],
+      tue: [{ open: '10:00', close: '21:00' }],
+      wed: [{ open: '10:00', close: '21:00' }],
+      thu: [{ open: '10:00', close: '21:00' }],
+      fri: [{ open: '10:00', close: '21:00' }],
+      sat: [{ open: '10:00', close: '21:00' }],
+      sun: [{ open: '10:00', close: '21:00' }],
+    },
     halal_level: null,
     serves_alcohol: false,
     prayer_room: false,
@@ -202,6 +261,8 @@ const places: SeedPlace[] = [
     arrondissement: 18,
     lat: 48.8876,
     lng: 2.3572,
+    category: 'divertissement',
+    opening_hours: DAILY_9_19,
     halal_level: null,
     serves_alcohol: false,
     prayer_room: false,
@@ -216,6 +277,16 @@ const places: SeedPlace[] = [
     arrondissement: 5,
     lat: 48.8513,
     lng: 2.3553,
+    category: 'touristique',
+    opening_hours: {
+      tue: [{ open: '10:00', close: '18:00' }],
+      wed: [{ open: '10:00', close: '18:00' }],
+      thu: [{ open: '10:00', close: '18:00' }],
+      fri: [{ open: '10:00', close: '18:00' }],
+      sat: [{ open: '10:00', close: '19:00' }],
+      sun: [{ open: '10:00', close: '19:00' }],
+      exceptions: [{ date: '2026-05-01', closed: true }],
+    },
     halal_level: null,
     serves_alcohol: false,
     prayer_room: false,
@@ -230,6 +301,15 @@ const places: SeedPlace[] = [
     arrondissement: 18,
     lat: 48.8844,
     lng: 2.3492,
+    category: 'touristique',
+    opening_hours: {
+      mon: [{ open: '10:00', close: '19:00' }],
+      tue: [{ open: '10:00', close: '19:00' }],
+      wed: [{ open: '10:00', close: '19:00' }],
+      thu: [{ open: '10:00', close: '19:00' }],
+      fri: [{ open: '10:00', close: '19:00' }],
+      sat: [{ open: '10:00', close: '19:00' }],
+    },
     halal_level: null,
     serves_alcohol: false,
     prayer_room: false,
@@ -246,11 +326,11 @@ async function seed() {
       `
       INSERT INTO places
         (type, name, slug, description, address, arrondissement, city, location,
-         halal_level, serves_alcohol, prayer_room, published)
+         category, opening_hours, halal_level, serves_alcohol, prayer_room, published)
       VALUES
         ($1, $2, $3, $4, $5, $6, 'Paris',
          ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
-         $9, $10, $11, $12)
+         $9, $10::jsonb, $11, $12, $13, $14)
       ON CONFLICT (slug) DO NOTHING
       `,
       [
@@ -262,6 +342,8 @@ async function seed() {
         p.arrondissement,
         p.lng,
         p.lat,
+        p.category ?? null,
+        p.opening_hours ? JSON.stringify(p.opening_hours) : null,
         p.halal_level,
         p.serves_alcohol,
         p.prayer_room,

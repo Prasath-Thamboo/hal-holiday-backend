@@ -96,4 +96,30 @@ describe('FavoritesService', () => {
       expect(result).toEqual([{ id: 'place-1' }]);
     });
   });
+
+  // ── listForExport ────────────────────────────────────────────────────────
+
+  describe('listForExport', () => {
+    it('LEFT JOINs places (keeps rows to unpublished/removed places) for the user', async () => {
+      const rows = [
+        {
+          place_id: 'place-1',
+          added_at: '2026-01-02T10:00:00.000Z',
+          name: 'Le Jardin de Marrakech',
+          slug: 'le-jardin-de-marrakech',
+          address: '14 rue des Lombards, 75004 Paris',
+        },
+      ];
+      favoritesRepo.query.mockResolvedValue(rows);
+
+      const result = await service.listForExport('user-1');
+
+      const [sql, params] = favoritesRepo.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('LEFT JOIN places p ON p.id = f.place_id');
+      expect(sql).not.toContain('p.published = true');
+      expect(sql).toContain('WHERE f.user_id = $1');
+      expect(params).toEqual(['user-1']);
+      expect(result).toEqual(rows);
+    });
+  });
 });

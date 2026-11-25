@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -7,13 +8,17 @@ import {
   IsLongitude,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { PlaceCategory } from '../../common/enums/place-category.enum';
 import { PlaceType } from '../../common/enums/place-type.enum';
+import { OpeningHoursDto } from './opening-hours.dto';
 
 export class CreatePlaceDto {
   @ApiProperty({ enum: PlaceType, example: PlaceType.RESTAURANT })
@@ -75,6 +80,24 @@ export class CreatePlaceDto {
   @Min(1)
   @Max(4)
   halal_level?: number;
+
+  @ApiPropertyOptional({
+    enum: PlaceCategory,
+    description: 'Sous-catégorie, pertinente uniquement pour type = activity',
+  })
+  @IsOptional()
+  @IsEnum(PlaceCategory)
+  category?: PlaceCategory;
+
+  @ApiPropertyOptional({
+    type: OpeningHoursDto,
+    description: 'Horaires d\'ouverture structurés (par jour + exceptions)',
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => OpeningHoursDto)
+  opening_hours?: OpeningHoursDto;
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()

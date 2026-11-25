@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '../common/enums/user-role.enum';
+import { FavoritesService } from '../favorites/favorites.service';
+import { TripsService } from '../trips/trips.service';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
@@ -19,9 +21,19 @@ const mockUsersRepo = () => ({
   delete: jest.fn().mockResolvedValue({ affected: 1 }),
 });
 
+const mockFavoritesService = () => ({
+  listForExport: jest.fn().mockResolvedValue([]),
+});
+
+const mockTripsService = () => ({
+  listForExport: jest.fn().mockResolvedValue([]),
+});
+
 describe('UsersService', () => {
   let service: UsersService;
   let repo: ReturnType<typeof mockUsersRepo>;
+  let favorites: ReturnType<typeof mockFavoritesService>;
+  let trips: ReturnType<typeof mockTripsService>;
 
   const fakeUser: User = {
     id: 'user-uuid',
@@ -43,11 +55,15 @@ describe('UsersService', () => {
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useFactory: mockUsersRepo },
+        { provide: FavoritesService, useFactory: mockFavoritesService },
+        { provide: TripsService, useFactory: mockTripsService },
       ],
     }).compile();
 
     service = module.get(UsersService);
     repo = module.get(getRepositoryToken(User));
+    favorites = module.get(FavoritesService);
+    trips = module.get(TripsService);
 
     jest.mocked(bcrypt.hash).mockResolvedValue('hashed-password' as never);
     jest.mocked(bcrypt.compare).mockResolvedValue(true as never);
@@ -196,6 +212,84 @@ describe('UsersService', () => {
       const result = await service.exportData(fakeUser.id);
       expect(result.profile).not.toHaveProperty('passwordHash');
       expect(result).toHaveProperty('exported_at');
+    });
+
+    it('includes the user favorites (RGPD portability, art. 20)', async () => {
+      repo.findOne.mockResolvedValue({ ...fakeUser });
+      const favRows = [
+        {
+          place_id: 'place-1',
+          added_at: '2026-01-02T10:00:00.000Z',
+          name: 'Le Jardin de Marrakech',
+          slug: 'le-jardin-de-marrakech',
+          address: '14 rue des Lombards, 75004 Paris',
+        },
+      ];
+      favorites.listForExport.mockResolvedValue(favRows);
+
+      const result = await service.exportData(fakeUser.id);
+
+      expect(favorites.listForExport).toHaveBeenCalledWith(fakeUser.id);
+      expect(result.favorites).toEqual(favRows);
+    });
+
+    it('exports an empty favorites array when the user has none', async () => {
+      repo.findOne.mockResolvedValue({ ...fakeUser });
+      favorites.listForExport.mockResolvedValue([]);
+
+      const result = await service.exportData(fakeUser.id);
+
+      expect(result.favorites).toEqual([]);
+    });
+
+    it('includes the user trips + planning items (RGPD portability, art. 20)', async () => {
+      repo.findOne.mockResolvedValue({ ...fakeUser });
+      const tripRows = [
+        {
+          id: 'trip-1',
+          title: 'Weekend à Paris',
+          start_date: '2026-05-01',
+          end_date: '2026-05-03',
+          created_at: '2026-01-02T10:00:00.000Z',
+          items: [
+            {
+              date: '2026-05-01',
+              slot: 'midi',
+              time: '12:30',
+              position: 0,
+              note: null,
+              place: {
+                id: 'place-1',
+                name: 'Le Jardin de Marrakech',
+                slug: 'le-jardin-de-marrakech',
+                address: '14 rue des Lombards, 75004 Paris',
+              },
+            },
+          ],
+        },
+      ];
+      trips.listForExport.mockResolvedValue(tripRows);
+
+      const result = await service.exportData(fakeUser.id);
+
+      expect(trips.listForExport).toHaveBeenCalledWith(fakeUser.id);
+      expect(result.trips).toEqual(tripRows);
+    });
+
+    it('exports an empty trips array when the user has none', async () => {
+      repo.findOne.mockResolvedValue({ ...fakeUser });
+      trips.listForExport.mockResolvedValue([]);
+
+      const result = await service.exportData(fakeUser.id);
+
+      expect(result.trips).toEqual([]);
+    });
+
+    it('throws NotFoundException for an unknown user', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.exportData('missing-id')).rejects.toThrow(NotFoundException);
+      expect(favorites.listForExport).not.toHaveBeenCalled();
+      expect(trips.listForExport).not.toHaveBeenCalled();
     });
   });
 

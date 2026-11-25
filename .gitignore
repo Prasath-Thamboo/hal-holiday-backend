@@ -1,4 +1,21 @@
+# Dépendances & build
 node_modules/
 dist/
-.env
 *.js.map
+*.tsbuildinfo
+
+# Environnement (secrets) — seul l'exemple est versionné
+.env
+.env.*
+!.env.example
+
+# Tests & logs
+coverage/
+*.log
+npm-debug.log*
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

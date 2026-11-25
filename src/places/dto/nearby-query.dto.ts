@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { PlaceCategory } from '../../common/enums/place-category.enum';
 import { PlaceType } from '../../common/enums/place-type.enum';
 
 export class NearbyQueryDto {
@@ -45,6 +46,19 @@ export class NearbyQueryDto {
   )
   @IsEnum(PlaceType, { each: true })
   types?: PlaceType[];
+
+  @ApiPropertyOptional({
+    enum: PlaceCategory,
+    isArray: true,
+    example: ['touristique', 'divertissement'],
+    description: 'Filtrer les activités par sous-catégorie',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: string | string[] }) =>
+    Array.isArray(value) ? value : [value],
+  )
+  @IsEnum(PlaceCategory, { each: true })
+  categories?: PlaceCategory[];
 
   @ApiPropertyOptional({
     example: 2,

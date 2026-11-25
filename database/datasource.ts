@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import * as path from 'path';
+import '../src/config/pg-date-parser';
 
 // Load .env manually for CLI usage (outside NestJS DI)
 // eslint-disable-next-line @typescript-eslint/no-require-imports

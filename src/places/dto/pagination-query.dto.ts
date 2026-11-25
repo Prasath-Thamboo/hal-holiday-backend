@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { PlaceCategory } from '../../common/enums/place-category.enum';
 import { PlaceType } from '../../common/enums/place-type.enum';
 
 export class PaginationQueryDto {
@@ -30,6 +31,12 @@ export class PaginationQueryDto {
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsEnum(PlaceType, { each: true })
   types?: PlaceType[];
+
+  @ApiPropertyOptional({ enum: PlaceCategory, isArray: true, description: 'Filtrer par sous-catégorie(s)' })
+  @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsEnum(PlaceCategory, { each: true })
+  categories?: PlaceCategory[];
 
   @ApiPropertyOptional({ example: 'couscous', description: 'Recherche par nom ou adresse' })
   @IsOptional()

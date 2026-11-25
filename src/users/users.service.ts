@@ -8,6 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { UserRole } from '../common/enums/user-role.enum';
+import { FavoritesService } from '../favorites/favorites.service';
+import { TripsService } from '../trips/trips.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { User } from './entities/user.entity';
@@ -19,6 +21,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    private readonly favoritesService: FavoritesService,
+    private readonly tripsService: TripsService,
   ) {}
 
   findByEmail(email: string): Promise<User | null> {
@@ -146,21 +150,32 @@ export class UsersService {
     return rest;
   }
 
-  /** Export RGPD (art. 20) : instantané des données personnelles du compte. */
+  /**
+   * Export RGPD (art. 20) : instantané des données personnelles du compte.
+   * `profile` inclut les préférences (langue, rigueur halal, notifications,
+   * consentements) ; `favorites` et `trips` (séjours + items de planning)
+   * couvrent les données créées par l'utilisateur.
+   */
   async exportData(userId: string): Promise<Record<string, unknown>> {
     const user = await this.findByIdOrThrow(userId);
     const { passwordHash: _omit, ...profile } = user;
+    const [favorites, trips] = await Promise.all([
+      this.favoritesService.listForExport(userId),
+      this.tripsService.listForExport(userId),
+    ]);
     return {
       exported_at: new Date().toISOString(),
       profile,
+      favorites,
+      trips,
     };
   }
 
   async deleteAccount(userId: string, password: string): Promise<void> {
     const user = await this.findByIdOrThrow(userId);
     await this.verifyPassword(user, password);
-    // Suppression définitive : les favoris (et futures données liées, ex.
-    // séjours/planning) sont retirés en cascade via les FK ON DELETE CASCADE.
+    // Suppression définitive : les données liées (favoris, séjours + items de
+    // planning) sont retirées en cascade via les FK ON DELETE CASCADE.
     await this.usersRepo.delete(user.id);
   }
 }

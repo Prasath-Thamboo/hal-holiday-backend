@@ -1,16 +1,26 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { PlaceCategory } from '../common/enums/place-category.enum';
 import { PlaceType } from '../common/enums/place-type.enum';
 import { Place } from './entities/place.entity';
 import { PlacesService } from './places.service';
 
+function makeQb(result: [unknown[], number] = [[], 0]) {
+  const qb: Record<string, jest.Mock> = {};
+  for (const m of ['orderBy', 'skip', 'take', 'andWhere']) {
+    qb[m] = jest.fn(() => qb);
+  }
+  qb.getManyAndCount = jest.fn().mockResolvedValue(result);
+  return qb;
+}
+
 const mockRepo = () => ({
   findOne: jest.fn(),
-  findAndCount: jest.fn(),
   query: jest.fn(),
   remove: jest.fn(),
   update: jest.fn(),
+  createQueryBuilder: jest.fn(() => makeQb()),
 });
 
 describe('PlacesService', () => {
@@ -49,47 +59,58 @@ describe('PlacesService', () => {
   describe('findAll', () => {
     it('uses default page=1 and limit=20', async () => {
       const places = [{ id: '1' }] as Place[];
-      repo.findAndCount.mockResolvedValue([places, 1]);
+      const qb = makeQb([places, 1]);
+      repo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findAll({});
 
-      expect(repo.findAndCount).toHaveBeenCalledWith({
-        where: {},
-        order: { created_at: 'DESC' },
-        skip: 0,
-        take: 20,
-      });
+      expect(qb.skip).toHaveBeenCalledWith(0);
+      expect(qb.take).toHaveBeenCalledWith(20);
+      expect(qb.orderBy).toHaveBeenCalledWith('p.created_at', 'DESC');
       expect(result.data).toBe(places);
       expect(result.meta).toEqual({ total: 1, page: 1, limit: 20, totalPages: 1 });
     });
 
     it('applies page and limit correctly (page=3, limit=10 → skip=20)', async () => {
-      repo.findAndCount.mockResolvedValue([[], 50]);
+      const qb = makeQb([[], 50]);
+      repo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findAll({ page: 3, limit: 10 });
 
-      expect(repo.findAndCount).toHaveBeenCalledWith({
-        where: {},
-        order: { created_at: 'DESC' },
-        skip: 20,
-        take: 10,
-      });
+      expect(qb.skip).toHaveBeenCalledWith(20);
+      expect(qb.take).toHaveBeenCalledWith(10);
       expect(result.meta.totalPages).toBe(5);
     });
 
     it('rounds totalPages up when total is not divisible by limit', async () => {
-      repo.findAndCount.mockResolvedValue([[], 21]);
+      repo.createQueryBuilder.mockReturnValue(makeQb([[], 21]));
       const result = await service.findAll({ limit: 10 });
       expect(result.meta.totalPages).toBe(3);
     });
 
-    it('searches name or address (OR) via ILike when search is provided', async () => {
-      repo.findAndCount.mockResolvedValue([[], 0]);
+    it('searches name or address (OR) via ILIKE when search is provided', async () => {
+      const qb = makeQb();
+      repo.createQueryBuilder.mockReturnValue(qb);
       await service.findAll({ search: 'couscous' });
 
-      const call = repo.findAndCount.mock.calls[0][0] as { where: unknown[] };
-      expect(Array.isArray(call.where)).toBe(true);
-      expect(call.where).toHaveLength(2);
+      const clause = qb.andWhere.mock.calls.find(([sql]) =>
+        String(sql).includes('ILIKE'),
+      );
+      expect(clause?.[0]).toContain('p.name ILIKE');
+      expect(clause?.[0]).toContain('p.address ILIKE');
+      expect(clause?.[1]).toEqual({ search: '%couscous%' });
+    });
+
+    it('narrows only activity rows when categories are provided', async () => {
+      const qb = makeQb();
+      repo.createQueryBuilder.mockReturnValue(qb);
+      await service.findAll({ categories: [PlaceCategory.TOURISTIQUE] });
+
+      const clause = qb.andWhere.mock.calls.find(([sql]) =>
+        String(sql).includes('p.category IN'),
+      );
+      expect(clause?.[0]).toContain("p.type <> 'activity'");
+      expect(clause?.[1]).toEqual({ categories: [PlaceCategory.TOURISTIQUE] });
     });
   });
 
@@ -125,6 +146,62 @@ describe('PlacesService', () => {
         expect.arrayContaining([dto.type, dto.name, dto.slug]),
       );
       expect(result).toBe(created);
+    });
+
+    it('serialises opening_hours to JSON and forwards category', async () => {
+      repo.findOne.mockResolvedValueOnce(null);
+      repo.query
+        .mockResolvedValueOnce([{ id: 'new-uuid' }])
+        .mockResolvedValueOnce([{ id: 'new-uuid' } as Place]);
+
+      const openingHours = { mon: [{ open: '09:00', close: '18:00' }] };
+      await service.create({
+        ...dto,
+        type: PlaceType.ACTIVITY,
+        category: PlaceCategory.TOURISTIQUE,
+        opening_hours: openingHours,
+      });
+
+      const [, params] = repo.query.mock.calls[0] as [string, unknown[]];
+      expect(params).toContain(PlaceCategory.TOURISTIQUE);
+      expect(params).toContain(JSON.stringify(openingHours));
+    });
+
+    it('passes null opening_hours when none provided', async () => {
+      repo.findOne.mockResolvedValueOnce(null);
+      repo.query
+        .mockResolvedValueOnce([{ id: 'new-uuid' }])
+        .mockResolvedValueOnce([{ id: 'new-uuid' } as Place]);
+
+      await service.create(dto);
+
+      const [sql, params] = repo.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('opening_hours');
+      // category + opening_hours slots both null for a bare restaurant
+      expect(params).toContain(null);
+    });
+  });
+
+  // ── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('persists category and opening_hours through the scalar update', async () => {
+      repo.query.mockResolvedValue([{ id: 'p1', slug: 'resto' }]);
+      repo.findOne.mockResolvedValue(null);
+
+      const openingHours = { fri: [{ open: '09:00', close: '17:00' }] };
+      await service.update('p1', {
+        category: PlaceCategory.TOURISTIQUE,
+        opening_hours: openingHours,
+      });
+
+      expect(repo.update).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({
+          category: PlaceCategory.TOURISTIQUE,
+          opening_hours: openingHours,
+        }),
+      );
     });
   });
 
@@ -180,6 +257,29 @@ describe('PlacesService', () => {
 
       const [sql] = repo.query.mock.calls[0] as [string, unknown[]];
       expect(sql).toContain('AND type IN');
+    });
+
+    it('selects category and opening_hours columns', async () => {
+      repo.query.mockResolvedValue([]);
+      await service.findNearby({ lat: 48.8566, lng: 2.3522 });
+
+      const [sql] = repo.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('category');
+      expect(sql).toContain('opening_hours');
+    });
+
+    it('adds sub-category filter when categories are provided', async () => {
+      repo.query.mockResolvedValue([]);
+      await service.findNearby({
+        lat: 48.8566,
+        lng: 2.3522,
+        categories: [PlaceCategory.DIVERTISSEMENT],
+      });
+
+      const [sql, params] = repo.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('category IN');
+      expect(sql).toContain("type <> 'activity'");
+      expect(params).toContain(PlaceCategory.DIVERTISSEMENT);
     });
 
     it('adds serves_alcohol filter when noAlcohol=true', async () => {

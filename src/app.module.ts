@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module';
 import databaseConfig from './config/database.config';
 import { FavoritesModule } from './favorites/favorites.module';
 import { PlacesModule } from './places/places.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { TripsModule } from './trips/trips.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -26,6 +28,8 @@ import { UsersModule } from './users/users.module';
     PlacesModule,
     UsersModule,
     FavoritesModule,
+    TripsModule,
+    PromotionsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

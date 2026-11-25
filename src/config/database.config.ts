@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import * as path from 'path';
+import './pg-date-parser';
 
 export default registerAs(
   'database',

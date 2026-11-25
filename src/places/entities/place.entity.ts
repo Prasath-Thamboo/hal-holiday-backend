@@ -5,7 +5,9 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { PlaceCategory } from '../../common/enums/place-category.enum';
 import { PlaceType } from '../../common/enums/place-type.enum';
+import { OpeningHours } from '../types/opening-hours';
 
 @Entity('places')
 export class Place {
@@ -42,6 +44,17 @@ export class Place {
     nullable: false,
   })
   location!: string;
+
+  /**
+   * Sous-catégorie, uniquement renseignée pour `type = activity`
+   * (`touristique` ou `divertissement`). `null` sinon.
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  category!: PlaceCategory | null;
+
+  /** Horaires d'ouverture structurés (par jour + exceptions). `null` si inconnu. */
+  @Column({ type: 'jsonb', nullable: true })
+  opening_hours!: OpeningHours | null;
 
   @Column({ type: 'smallint', nullable: true })
   halal_level!: number | null;
