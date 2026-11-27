@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { TRIP_SLOT_ORDER, TripSlot } from '../common/enums/trip-slot.enum';
 import { Place } from '../places/entities/place.entity';
 import { CreateTripItemDto } from './dto/create-trip-item.dto';
